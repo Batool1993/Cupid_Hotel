@@ -1,0 +1,160 @@
+openapi: 3.1.0
+info:
+  title: Cupid Hotels API
+  version: 1.0.0
+servers:
+  - url: http://localhost:8080
+
+paths:
+  /healthz:
+    get:
+      summary: Liveness
+      responses:
+        '200':
+          description: ok
+
+  /v1/hotels/{id}:
+    get:
+      summary: Get a hotel by id (localized)
+      description: >
+        Returns a localized hotel view. If the `lang` query parameter is not provided,
+        the server may use the `Accept-Language` header as a fallback. Supports
+        conditional GET via `If-None-Match`.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: lang
+          description: 2-letter language code; overrides Accept-Language if provided.
+          schema: { type: string, enum: [en, fr, es] }
+        - in: header
+          name: Accept-Language
+          required: false
+          description: Optional; used when `lang` is not provided.
+          schema: { type: string }
+        - in: header
+          name: If-None-Match
+          required: false
+          description: Return 304 if the current representation matches this ETag.
+          schema: { type: string }
+      responses:
+        '200':
+          description: OK
+          headers:
+            Content-Language:
+              description: Language of the representation.
+              schema: { type: string }
+            ETag:
+              description: Entity tag for conditional requests.
+              schema: { type: string }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HotelView'
+        '304':
+          description: Not Modified (ETag matched)
+          headers:
+            ETag:
+              description: Entity tag of the current representation.
+              schema: { type: string }
+        '404':
+          $ref: '#/components/responses/Problem'
+
+  /v1/hotels/{id}/reviews:
+    get:
+      summary: List reviews for a hotel
+      description: >
+        Returns a list of reviews for the given hotel. Current server supports `limit`
+        only (no cursor yet). Field names are capitalized to match the server output.
+      parameters:
+        - in: path
+          name: id
+          required: true
+          schema: { type: integer }
+        - in: query
+          name: limit
+          schema: { type: integer, minimum: 1, maximum: 200, default: 50 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReviewsPage'
+        '404':
+          $ref: '#/components/responses/Problem'
+
+components:
+  responses:
+    Problem:
+      description: Error (RFC-7807)
+      content:
+        application/problem+json:
+          schema:
+            $ref: '#/components/schemas/Problem'
+
+  schemas:
+    Problem:
+      type: object
+      required: [title, status]
+      properties:
+        type: { type: string }
+        title: { type: string }
+        status: { type: integer }
+        detail: { type: string }
+
+    # Matches current hotel view struct (lowercase JSON keys).
+    HotelView:
+      type: object
+      properties:
+        id: { type: integer }
+        stars: { type: integer, nullable: true }
+        coords:
+          type: object
+          nullable: true
+          properties:
+            lat: { type: number }
+            lon: { type: number }
+        country: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        amenities:
+          type: array
+          items: { type: string }
+        images:
+          type: array
+          items: { type: string }
+        name: { type: string, nullable: true }
+        description: { type: string, nullable: true }
+        policies: { type: string, nullable: true }
+        language: { type: string }
+
+    # IMPORTANT: Keys are capitalized to mirror current server output.
+    ReviewsPage:
+      type: object
+      properties:
+        Items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Review'
+        NextCursor:
+          type: string
+          nullable: true
+
+    # IMPORTANT: Keys are capitalized; mirrors your current response.
+    # At present, CreatedAt is NOT in the JSON; AspectsJSON/Source/RawJSON ARE present.
+    Review:
+      type: object
+      properties:
+        ID: { type: integer }
+        PropertyID: { type: integer }
+        SourceID: { type: string, nullable: true }
+        Author: { type: string, nullable: true }
+        Rating: { type: number, format: float, nullable: true }
+        Lang: { type: string, nullable: true }
+        Title: { type: string, nullable: true }
+        Text: { type: string, nullable: true }
+        AspectsJSON: { type: string, nullable: true, description: "opaque JSON string; may be null" }
+        Source: { type: string, nullable: true }
+        RawJSON: { type: string, nullable: true }

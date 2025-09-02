@@ -1,0 +1,16 @@
+# --- build stage ---
+FROM golang:1.23 AS build
+WORKDIR /src
+COPY . .
+
+# Build for the current build platform; keep symbols (easier to debug)
+RUN CGO_ENABLED=0 go build -trimpath -o /out/ingestor ./cmd/ingestor
+
+# --- debug-friendly final stage (has /bin/sh & curl) ---
+FROM debian:12-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates curl && rm -rf /var/lib/apt/lists/*
+COPY --from=build /out/ingestor /app/ingestor
+
+# helpful banner so logs show container actually started
+ENV INGESTOR_BANNER="ingestor container starting"
+ENTRYPOINT ["/bin/sh","-lc","echo \"$INGESTOR_BANNER\"; exec /app/ingestor"]

@@ -1,0 +1,56 @@
+services:
+  mysql:
+    image: mysql:8.0.36
+    env_file:
+      - ../.env
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      MYSQL_DATABASE: ${MYSQL_DATABASE}
+      MYSQL_USER: ${MYSQL_USER}
+      MYSQL_PASSWORD: ${MYSQL_PASSWORD}
+    ports:
+      - "127.0.0.1:3307:3306"
+    command:
+      - --character-set-server=utf8mb4
+      - --collation-server=utf8mb4_0900_ai_ci
+      - --skip-name-resolve
+
+    healthcheck:
+      # NOTE: CMD-SHELL + $${VAR:-default} so Compose won't expand at parse time
+      test: ["CMD-SHELL", "mysqladmin ping -h localhost -p$${MYSQL_ROOT_PASSWORD:-root}"]
+      interval: 5s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - mysql_data:/var/lib/mysql
+      - ../internal/storage/mysql/migrations:/docker-entrypoint-initdb.d:ro
+
+  redis:
+    image: redis:7
+    ports:
+      - "127.0.0.1:6379:6379"  # bind Redis to loopback too
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.api
+    env_file: ../.env
+    depends_on:
+      mysql: { condition: service_healthy }
+      redis: { condition: service_started }
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "9100:9100"
+    command: ["/app/api"]
+
+  ingestor:
+    build:
+      context: ..
+      dockerfile: docker/Dockerfile.ingestor
+    env_file: ../.env
+    depends_on:
+      mysql: { condition: service_healthy }
+    command: ["/app/ingestor"]
+
+volumes:
+  mysql_data:
